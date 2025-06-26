@@ -1,24 +1,24 @@
-module HighEntropyRice
+module StandardRice
 
 export rice_encode, rice_decode
 
 
 """
-    unary_encode(input::Int)::BitVector
+    unary_encode(input::UInt)::BitVector
 
 Encodes the integer using unary coding: `input` 1s followed by a 0.
 """
-function unary_encode(input::Int)::BitVector
+function unary_encode(input::UInt)::BitVector
     return BitVector(vcat(fill(true, input), false))
 end
 
 
 """
-    binary_encode(input::Int, k::Int)::BitVector
+    binary_encode(input::UInt, k::UInt)::BitVector
 
 Encodes the integer using k bits in binary (MSB first).
 """
-function binary_encode(input::UInt, k::Int)::BitVector
+function binary_encode(input::UInt, k::UInt)::BitVector
     bits = BitVector()
     for i in k-1:-1:0
         push!(bits, (input >> i) & 1 == 1)
@@ -28,16 +28,22 @@ end
 
 
 """
-    encode_value(input::Int, k::Int, encoded::BitVector)
+    encode_value(input::UInt, k::UInt, encoded::BitVector)
 
 Encodes the given value using Rice compression.
 """
-function encode_value(value::UInt, k::Int, encoded::BitVector)
-    append!(encoded, binary_encode(value, k))
+function encode_value(value::UInt, k::UInt, encoded::BitVector)
+    append!(encoded, unary_encode(value >> k))
+    append!(encoded, binary_encode(value & ((1 << k) -1), k))
 end
 
+"""
+    unsign(value::Int)::UInt
+
+Converts a positive or negative integer into an unsigned integer for Rice Compression
+"""
 function unsign(value::Int)::UInt
-    return ((value<0) ? ~(value<<1) : (value<<1));
+    return ((value<0) ? ~(value<<1) : (value<<1))
 end
 
 
@@ -49,7 +55,7 @@ Returns a BitVector to optimize space usage.
 """
 function rice_encode(data::Vector{Int})::BitVector
     encoded = BitVector()  # Initialize an empty BitVector
-    k = 16
+    k::UInt = ndigits(data[1], base = 2)
 
     #Encode the k value
     append!(encoded, unary_encode(k))
@@ -101,10 +107,17 @@ end
 Decodes a value using Rice compression.
 """
 function decode_value(pos::Int, k::Int, encoded::BitVector)::Tuple{Int, Int}
-    value, pos = binary_decode(encoded, pos, k)
+    q, pos = unary_decode(encoded, pos)
+    r, pos = binary_decode(encoded, pos, k)
+    value = q << k | r
     return resign(value), pos
 end
 
+"""
+    resign(value::Int)::Int
+
+Reverses the unsign function to return a positive or negative integer
+"""
 function resign(value::Int)::Int
     if ((value & 1) == 0)
 		value = value>>1;

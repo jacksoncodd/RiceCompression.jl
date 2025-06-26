@@ -1,4 +1,4 @@
-module HighEntropyRice
+module BasicRiceCompression
 
 export rice_encode, rice_decode
 
@@ -18,7 +18,7 @@ end
 
 Encodes the integer using k bits in binary (MSB first).
 """
-function binary_encode(input::UInt, k::Int)::BitVector
+function binary_encode(input::Int, k::Int)::BitVector
     bits = BitVector()
     for i in k-1:-1:0
         push!(bits, (input >> i) & 1 == 1)
@@ -32,12 +32,9 @@ end
 
 Encodes the given value using Rice compression.
 """
-function encode_value(value::UInt, k::Int, encoded::BitVector)
-    append!(encoded, binary_encode(value, k))
-end
-
-function unsign(value::Int)::UInt
-    return ((value<0) ? ~(value<<1) : (value<<1));
+function encode_value(value::Int, k::Int, encoded::BitVector)
+    append!(encoded, unary_encode(value >> k))
+    append!(encoded, binary_encode(value & ((1 << k) -1), k))
 end
 
 
@@ -49,16 +46,11 @@ Returns a BitVector to optimize space usage.
 """
 function rice_encode(data::Vector{Int})::BitVector
     encoded = BitVector()  # Initialize an empty BitVector
-    k = 16
+    k = ndigits(data[1], base = 2) - 1
 
-    #Encode the k value
     append!(encoded, unary_encode(k))
 
-    #Encode the initial entry in the BitVector
-    encode_value(unsign(data[1]), k, encoded)
-
-    #Encode the differences between adjacent values
-    encode_value.(unsign.(data[2:end] - data[1:end-1]), k, Ref(encoded))
+    encode_value.(data, k, Ref(encoded))
     return encoded  # Explicitly convert to BitVector
 end
 
@@ -101,18 +93,12 @@ end
 Decodes a value using Rice compression.
 """
 function decode_value(pos::Int, k::Int, encoded::BitVector)::Tuple{Int, Int}
-    value, pos = binary_decode(encoded, pos, k)
-    return resign(value), pos
+    q, pos = unary_decode(encoded, pos)
+    r, pos = binary_decode(encoded, pos, k)
+    value = q << k | r
+    return value, pos
 end
 
-function resign(value::Int)::Int
-    if ((value & 1) == 0)
-		value = value>>1;
-	else
-		value = ~(value>>1);
-    end
-    return value
-end
 
 """
     rice_decode(encoded::BitVector, k::Int)::Vector{Int}
@@ -122,20 +108,11 @@ Decodes a Rice-coded bit stream into its original integer array.
 function rice_decode(encoded::BitVector)::Vector{Int}
     decoded = Int[]
     pos = 1
-
-    #Decode the k value
     k, pos = unary_decode(encoded, pos)
 
-    #Decode the initial value
-    initial, pos = decode_value(pos, k, encoded)
-    push!(decoded, initial)
-    current = initial
-
     while pos <= length(encoded)
-        #Solve for each entry by adding the difference to the previous entry
-        diff, pos = decode_value(pos, k, encoded)
-        current += diff
-        push!(decoded, current)
+        value, pos = decode_value(pos, k, encoded)
+        push!(decoded, value)
     end
 
     return decoded
