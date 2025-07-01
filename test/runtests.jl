@@ -4,16 +4,21 @@ using Base: summarysize
 using ..HighEntropyRice
 using ..BasicRiceCompression
 using ..StandardRice
+using ..UIntRice
+using FITSFiles
+
+# file = FITSFiles.fits("file009")
 
 
 # Test array
-data = Int[100, 101, 102, 103, 104, 200, 205, 208, 300, 306, 500, 502, 510, 1603, 1600, 500, 437]
+data = Int[100, 101, 102, 103, 104, 200, 205, 208, 300, 306, 500, 502, 510, 1603, 1600, 500, 497]
+
 
 # Encoding
-compressed = StandardRice.rice_encode(data)
+compressed = UIntRice.rice_encode(data)
 
 # Decoding
-decoded = StandardRice.rice_decode(compressed)
+decoded = UIntRice.rice_decode(compressed, length(data))
 
 println("Original Data: ", data)
 println("Size of original data (bytes): ", summarysize(data))
@@ -22,3 +27,4 @@ println("Size of compressed data (bytes): ", summarysize(compressed))
 println("Decoded Data: ", decoded)
 println("Size of decoded data (bytes): ", summarysize(decoded))
 println("Match: ", data == decoded)
+
