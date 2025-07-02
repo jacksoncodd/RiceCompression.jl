@@ -1,13 +1,14 @@
 using Base: summarysize
 
 # Testing the implementation
-using ..HighEntropyRice
-using ..BasicRiceCompression
-using ..StandardRice
+# using ..HighEntropyRice
+# using ..BasicRiceCompression
+# using ..StandardRice
 using ..UIntRice
 using FITSFiles
 
-# file = FITSFiles.fits("file009")
+# FITSFiles.info("ZIMAGE")
+# file = FITSFiles.fits("data/file009.fits")
 
 
 # Test array
