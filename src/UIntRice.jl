@@ -237,7 +237,7 @@ end
 
 Decodes the values of a block length thisblock
 """
-function decode_block(encoded::Array{UInt8}, decoded::Vector{Int}, pos::Int, buffer::Int, lastpix::Int, thisblock::Int, fsmax::Int, fsbits::Int)::Tuple{Int, Int, Int}
+function decode_block(encoded::Array{UInt8}, decoded::Vector{Int16}, pos::Int, buffer::Int, lastpix::Int, thisblock::Int, fsmax::Int, fsbits::Int)::Tuple{Int, Int, Int}
     #Decode the fs value
     fs, pos, buffer = binary_decode(encoded, fsbits, pos, buffer)
     bbits = 1 << fsbits	
@@ -264,8 +264,8 @@ function decode_block(encoded::Array{UInt8}, decoded::Vector{Int}, pos::Int, buf
 end
 
 
-function arrange(vector::Vector{Int}, dims::Tuple{Int, Int})::Matrix{Int}
-    decoded::Matrix{Int} = zeros(Int, dims)
+function arrange(vector::Vector{Int16}, dims::Tuple{Int, Int})::Matrix{Int16}
+    decoded::Matrix{Int16} = zeros(Int, dims)
     for i in 0:dims[1]-1
         for j in 1:dims[2]
             decoded[i+1,j] = vector[i*dims[2] + j]
@@ -288,9 +288,9 @@ function rice_decode(encoded::Array{UInt8},
                                 dims::Tuple{Int,Int},
                                 fsbits::Int = 5,
                                 fsmax::Int = 25,
-                                nblock::Int = 32)::Matrix{Int}
+                                nblock::Int = 32)::Matrix{Int16}
     
-    decoded_array = Int[]
+    decoded_array = Int16[]
     pos = 1
     buffer = 8
     bbits = 1 << fsbits
@@ -304,7 +304,7 @@ function rice_decode(encoded::Array{UInt8},
     thisblock = nblock
     i = 0
     while(i <= nx)
-        if (nx-i < nblock) 
+        if (nx-i < nblock)
             thisblock = nx-i
         end
 	    pos, buffer, lastpix = decode_block(encoded, decoded_array, pos, buffer, lastpix, thisblock, fsmax, fsbits)
