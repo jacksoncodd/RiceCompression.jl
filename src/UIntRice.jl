@@ -78,11 +78,14 @@ function encode_block(data::Vector{Int}, encoded::Array{UInt8}, pos::Int, buffer
         psum >>= 1
         fs += 1
     end
+
     #High entropy case when fs > fsmax, encode pixel differences directly
     if fs > fsmax
+        println("High Entropy Engaged")
         encoded, pos, buffer = write(fsmax + 1, fsbits, encoded, pos, buffer)
         for x in diff
             encoded, pos, buffer = write(x, bbits, encoded, pos, buffer)
+            println("encoded ", x)
         end
     #Standard case, encode differences using rice compression
     else
@@ -104,19 +107,27 @@ fsmax: Maximum value for fs. Must be less than 2^fsbits
 nblock: Encoding block size. Smaller values result in better rice encoding but more fs values stored
 Returns an Array of unsigned integers.
 """
-function rice_encode(data::Vector{Int},
+function rice_encode(data::Matrix{Int16},
                         fsbits::Int = 5,
                         fsmax::Int = 25,
                         nblock::Int = 8)::Array{UInt8}
     
+    data_array::Array{Int} = []
     encoded::Array{UInt8} = zeros(UInt8, 1)
     pos = 1
     buffer = 8
     nx = length(data)
+    dims = size(data)
     bbits = 1 << fsbits
+    println(dims)
+    for i in 1:dims[1]
+        for j in 1:dims[2]
+            push!(data_array, data[i,j])
+        end
+    end
 
     #Encode the initial entry
-    lastpix = data[1]
+    lastpix = data_array[1]
     encoded, pos, buffer = write(lastpix, bbits, encoded, pos, buffer)
 
     #Encode pixel differences one block at a time
@@ -126,7 +137,7 @@ function rice_encode(data::Vector{Int},
         if (nx-i < nblock) 
             thisblock = nx-i
         end
-	    encoded, pos, buffer, lastpix = encode_block(data[i+1:i+thisblock], encoded, pos, buffer, lastpix, thisblock, fsmax, fsbits)
+	    encoded, pos, buffer, lastpix = encode_block(data_array[i+1:i+thisblock], encoded, pos, buffer, lastpix, thisblock, fsmax, fsbits)
         i += nblock
     end
 
@@ -229,11 +240,15 @@ Decodes the values of a block length thisblock
 function decode_block(encoded::Array{UInt8}, decoded::Vector{Int}, pos::Int, buffer::Int, lastpix::Int, thisblock::Int, fsmax::Int, fsbits::Int)::Tuple{Int, Int, Int}
     #Decode the fs value
     fs, pos, buffer = binary_decode(encoded, fsbits, pos, buffer)
+    bbits = 1 << fsbits	
+
     #High entropy case, values written directly in binary
     if(fs > fsmax)
+        println("High Entropy decode")
         for _ in 1:thisblock
             diff, pos, buffer = binary_decode(encoded, bbits, pos, buffer)
-            lastpix += diff
+            println(resign(diff))
+            lastpix += resign(diff)
             push!(decoded, lastpix)
         end
     #Standard case, decode from rice compression
@@ -248,6 +263,18 @@ function decode_block(encoded::Array{UInt8}, decoded::Vector{Int}, pos::Int, buf
     return pos, buffer, lastpix
 end
 
+
+function arrange(vector::Vector{Int}, dims::Tuple{Int, Int})::Matrix{Int}
+    decoded::Matrix{Int} = zeros(Int, dims)
+    for i in 0:dims[1]-1
+        for j in 1:dims[2]
+            decoded[i+1,j] = vector[i*dims[2] + j]
+        end
+    end
+    return decoded
+end
+
+
 """
     rice_decode(encoded::Array{UInt8}, nx::Int, fsbits::Int = 5, fsmax::Int = 25, nblock::Int = 8)::Vector{Int}
 
@@ -258,15 +285,16 @@ nblock: Encoding block size. Smaller values result in better rice encoding but m
 Decodes a Rice-coded UInt8 array into its original integer array.
 """
 function rice_decode(encoded::Array{UInt8}, 
-                                nx::Int,
+                                dims::Tuple{Int,Int},
                                 fsbits::Int = 5,
                                 fsmax::Int = 25,
-                                nblock::Int = 8)::Vector{Int}
+                                nblock::Int = 8)::Matrix{Int}
     
-    decoded = Int[]
+    decoded_array = Int[]
     pos = 1
     buffer = 8
     bbits = 1 << fsbits
+    nx = dims[1] * dims[2]
 
     #Decode the initial value
     initial, pos, buffer = binary_decode(encoded, bbits, pos, buffer)
@@ -279,11 +307,11 @@ function rice_decode(encoded::Array{UInt8},
         if (nx-i < nblock) 
             thisblock = nx-i
         end
-	    pos, buffer, lastpix = decode_block(encoded, decoded, pos, buffer, lastpix, thisblock, fsmax, fsbits)
+	    pos, buffer, lastpix = decode_block(encoded, decoded_array, pos, buffer, lastpix, thisblock, fsmax, fsbits)
         i += nblock
     end
 
-    return decoded
+    return arrange(decoded_array, dims)
 end
 
 end  # module
