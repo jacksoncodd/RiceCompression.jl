@@ -110,7 +110,7 @@ Returns an Array of unsigned integers.
 function rice_encode(data::Matrix{Int16},
                         fsbits::Int = 5,
                         fsmax::Int = 25,
-                        nblock::Int = 8)::Array{UInt8}
+                        nblock::Int = 32)::Array{UInt8}
     
     data_array::Array{Int} = []
     encoded::Array{UInt8} = zeros(UInt8, 1)
@@ -288,7 +288,7 @@ function rice_decode(encoded::Array{UInt8},
                                 dims::Tuple{Int,Int},
                                 fsbits::Int = 5,
                                 fsmax::Int = 25,
-                                nblock::Int = 8)::Matrix{Int}
+                                nblock::Int = 32)::Matrix{Int}
     
     decoded_array = Int[]
     pos = 1
