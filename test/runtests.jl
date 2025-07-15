@@ -4,7 +4,7 @@ using Base: summarysize
 # using ..HighEntropyRice
 # using ..BasicRiceCompression
 # using ..StandardRice
-using ..UIntRice
+using ..RiceCompression
 using FITSFiles
 using Test
 
@@ -61,17 +61,23 @@ data = file[1].data
 #     end
 # end
 
-
+bsize = 32
 # Encoding
-compressed = UIntRice.rice_encode(data)
+compressed = RiceCompression.rice_encode(data, bsize)
 # println("Original Data: ", data)
 println("Size of original data (bytes): ", summarysize(data))
 # println("Compressed Data: ", compressed)
 println("Size of compressed data (bytes): ", summarysize(compressed))
 
 # Decoding
-decoded = UIntRice.rice_decode(compressed, size(data))
+decoded = RiceCompression.rice_decode(compressed, size(data), Int16, bsize)
 # println("Decoded Data: ", decoded)
 println("Size of decoded data (bytes): ", summarysize(decoded))
 println("Match: ", data == decoded)
+
+# # using cfitsio
+# using Libdl
+# dlopen("cfitsio.so")
+# a = @ccall "ricecomp.c".fits_rcomp_short([1,2,3,4]::Ptr{Int},4::Int, 5::Int, 32::Int)::Int
+# # t = @ccall clock()::Int32
 
