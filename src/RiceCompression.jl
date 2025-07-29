@@ -2,20 +2,23 @@ module RiceCompression
 
 using Statistics
 
-export rice_encode, rice_decode
+export encode, decode, Rice
+
+abstract type CompressionType end
+abstract type Rice <: CompressionType end
 
 """
-    write(value::Int, bit_length::Int, encoded::Array{UInt8}, pos::Int, buffer::Int)::Tuple{Array, Int, Int}
+    write!(encoded::Array{UInt8}, value::Integer, bit_length::Integer, pos::Integer, buffer::UInt8)
 
 Encodes the integer using bit_length bits in binary (MSB first).
 """
-function write(value::Int, bit_length::Int, encoded::Array{UInt8}, pos::Int, buffer::Int)::Tuple{Array, Int, Int}
+function write!(encoded::Array{UInt8}, value::Integer, bit_length::Integer, pos::Integer, buffer::UInt8)
     while(bit_length >= buffer)
         bit_length -= buffer
         encoded[pos] = encoded[pos] | (value >> bit_length)
         value = value & ((1 << bit_length)-1)
         append!(encoded, 0)
-        buffer = 8
+        buffer::UInt8 = 8
         pos += 1
     end
     if(bit_length > 0)
@@ -27,41 +30,43 @@ end
 
 
 """
-    encode_value(value::Int, fs::Int, encoded::Array{UInt8}, pos::Int, buffer::Int)::Tuple{Array, Int, Int}
+    encode_value!(encoded::Array{UInt8}, value::Integer, fs::Integer, pos::Integer, buffer::UInt8)
 
 Encodes the given value using Rice compression.
 """
-function encode_value(value::Int, fs::Int, encoded::Array{UInt8}, pos::Int, buffer::Int)::Tuple{Array, Int, Int}
+function encode_value!(encoded::Array{UInt8}, value::Integer, fs::Integer, pos::Integer, buffer::UInt8)
+    #Calculate the quotient
     q = value >> fs
+    #Encode quotient
     for _ in 1:q
-        encoded, pos, buffer = write(1, 1, encoded, pos, buffer)
+        encoded, pos, buffer = write!(encoded, 1, 1, pos, buffer)
     end
-    encoded, pos, buffer = write(0, 1, encoded, pos, buffer)
-    # encoded, pos, buffer = write((((1 << q)-1) << 1), q+1, encoded, pos, buffer)
-    encoded, pos, buffer = write(value & ((1 << fs) -1), fs, encoded, pos, buffer)
+    encoded, pos, buffer = write!(encoded, 0, 1, pos, buffer)
+    #Encode remainder
+    encoded, pos, buffer = write!(encoded, value & ((1 << fs) -1), fs, pos, buffer)
     return encoded, pos, buffer
 end
 
 """
-    unsign(value::Int)::Int
+    unsign(value::Int)
 
 Converts a positive or negative integer into a positive integer for Rice Compression
 """
-function unsign(value::Int)::Int
+function unsign(value::Integer)
     return ((value<0) ? ~(value<<1) : (value<<1))
 end
 
 
 """
-    encode_block(data::Vector{Int}, encoded::Array{UInt8}, pos::Int, buffer::Int, lastpix::Int, thisblock::Int, fsmax::Int, fsbits::Int)::Tuple{Array, Int, Int, Int}
+    encode_block!(encoded::Array{UInt8}, data::Vector{<:Integer}, pos::Integer, buffer::UInt8, lastpix::Integer, thisblock::Integer, fsmax::Integer, fsbits::Integer)
 
 Encodes a block of integers with size thisblock using rice compression
 """
-function encode_block(data::Vector{Int}, encoded::Array{UInt8}, pos::Int, buffer::Int, lastpix::Int, thisblock::Int, fsmax::Int, fsbits::Int)::Tuple{Array, Int, Int, Int}
+function encode_block!(encoded::Array{UInt8}, data::Vector{<:Integer}, pos::Integer, buffer::UInt8, lastpix::Integer, thisblock::Integer, fsmax::Integer, fsbits::Integer)
     pixelsum = 0.0
-    diff::Array{Int} = zeros(Int, thisblock)
+    diff = zeros(Int, thisblock)
     fs = 0
-    bbits = 1 << fsbits	
+    bbits = 1 << fsbits
 
     #Calculate the average pixel difference within the block
     for j in 1:thisblock
@@ -85,17 +90,16 @@ function encode_block(data::Vector{Int}, encoded::Array{UInt8}, pos::Int, buffer
 
     #High entropy case when fs > fsmax, encode pixel differences directly
     if fs > fsmax
-        println("High Entropy Engaged")
-        encoded, pos, buffer = write(fsmax + 1, fsbits, encoded, pos, buffer)
+        encoded, pos, buffer = write!(encoded, fsmax + 1, fsbits, pos, buffer)
         for x in diff
-            encoded, pos, buffer = write(x, bbits, encoded, pos, buffer)
-            println("encoded ", x)
+            encoded, pos, buffer = write!(encoded, x, bbits, pos, buffer)
         end
+
     #Standard case, encode differences using rice compression
     else
-        encoded, pos, buffer = write(fs, fsbits, encoded, pos, buffer)
+        encoded, pos, buffer = write!(encoded, fs, fsbits, pos, buffer)
         for x in diff
-            encoded, pos, buffer = encode_value(x, fs, encoded, pos, buffer)
+            encoded, pos, buffer = encode_value!(encoded, x, fs, pos, buffer)
         end
     end
     return encoded, pos, buffer, lastpix
@@ -103,7 +107,7 @@ end
 
 
 """
-    rice_encode(data::Vector{Int}, fsbits::Int = 5, fsmax::Int = 25, nblock::Int = 32)::Array{UInt8}
+    encode(::Type{Rice}, data::AbstractVector{<:Integer}; nblock::Integer = 32)
 
 Encodes an array of integers using Rice coding.
 fsbits: Number of bits to store fs values in
@@ -111,11 +115,11 @@ fsmax: Maximum value for fs. Must be less than 2^fsbits
 nblock: Encoding block size. Smaller values result in better rice encoding but more fs values stored
 Returns an Array of unsigned integers.
 """
-function rice_encode(data::Matrix,
-                        nblock::Int = 32)::Array{UInt8}
+function encode(::Type{Rice}, data::AbstractVector{<:Integer};
+                        nblock::Integer = 32)
     
     #Assign constants based on Int type
-    typelen = sizeof(typeof(data[1]))*8
+    typelen = sizeof(eltype(data))*8
     fsmax = typelen - 2
     fsbits = ndigits(typelen, base = 2) - 1
     bbits = 1 << fsbits
@@ -123,21 +127,12 @@ function rice_encode(data::Matrix,
     #Initialize encoding variables
     encoded::Array{UInt8} = zeros(UInt8, 1)
     pos = 1
-    buffer = 8
+    buffer::UInt8 = 8
     nx = length(data)
 
-    #Convert matrix to 1D array
-    data_array::Array{Int} = []
-    dims = size(data)
-    for i in 1:dims[1]
-        for j in 1:dims[2]
-            push!(data_array, data[i,j])
-        end
-    end
-
     #Encode the initial entry
-    lastpix = data_array[1]
-    encoded, pos, buffer = write(lastpix, bbits, encoded, pos, buffer)
+    lastpix = data[1]
+    encoded, pos, buffer = write!(encoded, lastpix, bbits, pos, buffer)
 
     #Encode pixel differences one block at a time
     thisblock = nblock
@@ -146,7 +141,7 @@ function rice_encode(data::Matrix,
         if (nx-i < nblock) 
             thisblock = nx-i
         end
-	    encoded, pos, buffer, lastpix = encode_block(data_array[i+1:i+thisblock], encoded, pos, buffer, lastpix, thisblock, fsmax, fsbits)
+	    encoded, pos, buffer, lastpix = encode_block!(encoded, data[i+1:i+thisblock], pos, buffer, lastpix, thisblock, fsmax, fsbits)
         i += nblock
     end
 
@@ -155,18 +150,18 @@ end
 
 
 """
-    unary_decode(encoded::Array{UInt8}, pos::Int, buffer::Int)::Tuple{Int, Int, Int}
+    unary_decode!(encoded::Array{UInt8}, pos::Integer, buffer::UInt8)
 
 Decodes the unary-coded integer starting at element `pos`, bit `buffer`.
 Returns the decoded integer and the updated position.
 """
-function unary_decode(encoded::Array{UInt8}, pos::Int, buffer::Int)::Tuple{Int, Int, Int}
+function unary_decode!(encoded::Array{UInt8}, pos::Integer, buffer::UInt8)
     value = 0
     bit = 1
     while(bit == 1)
         if(buffer <= 0)
             pos += 1
-            buffer = 8
+            buffer::UInt8 = 8
         end
         if(pos > length(encoded))
             return value, pos, buffer
@@ -184,12 +179,12 @@ end
 
 
 """
-    binary_decode(encoded::Array{UInt8}, fs::Int, pos::Int, buffer::Int)::Tuple{Int, Int, Int}
+    binary_decode!(encoded::Array{UInt8}, fs::Integer, pos::Integer, buffer::UInt8)
 
 Decodes a fs-bit binary integer starting at element `pos`, bit `buffer`.
 Returns the decoded integer and the updated position.
 """
-function binary_decode(encoded::Array{UInt8}, fs::Int, pos::Int, buffer::Int)::Tuple{Int, Int, Int}
+function binary_decode!(encoded::Array{UInt8}, fs::Integer, pos::Integer, buffer::UInt8)
     output = 0
     bits_to_go = fs
     while(bits_to_go >= buffer)
@@ -200,7 +195,7 @@ function binary_decode(encoded::Array{UInt8}, fs::Int, pos::Int, buffer::Int)::T
         bits = encoded[pos] & ((1 << buffer) - 1)
         output = output | (bits << bits_to_go) 
         pos += 1
-        buffer = 8
+        buffer::UInt8 = 8
     end
     if(bits_to_go > 0)
         if(pos > length(encoded))
@@ -215,23 +210,23 @@ end
 
 
 """
-    decode_value(encoded::Array{UInt8}, fs::Int, pos::Int, buffer::Int)::Tuple{Int, Int, Int}
+    decode_value!(encoded::Array{UInt8}, fs::Integer, pos::Integer, buffer::UInt8)
 
 Decodes a value using Rice compression with the given fs value.
 """
-function decode_value(encoded::Array{UInt8}, fs::Int, pos::Int, buffer::Int)::Tuple{Int, Int, Int}
-    q, pos, buffer = unary_decode(encoded, pos, buffer)
-    r, pos, buffer = binary_decode(encoded, fs, pos, buffer)
+function decode_value!(encoded::Array{UInt8}, fs::Integer, pos::Integer, buffer::UInt8)
+    q, pos, buffer = unary_decode!(encoded, pos, buffer)
+    r, pos, buffer = binary_decode!(encoded, fs, pos, buffer)
     value = q << fs | r
     return resign(value), pos, buffer
 end
 
 """
-    resign(value::Int)::Int
+    resign(value::Integer)
 
 Reverses the unsign function to return a positive or negative integer
 """
-function resign(value::Int)::Int
+function resign(value::Integer)
     if ((value & 1) == 0)
 		value = value>>1;
 	else
@@ -242,19 +237,19 @@ end
 
 
 """
-    decode_block(encoded::Array{UInt8}, decoded::Vector{Int}, pos::Int, buffer::Int, lastpix::Int, thisblock::Int, fsmax::Int, fsbits::Int)::Tuple{Int, Int, Int}
+    decode_block!(encoded::Array{UInt8}, decoded::Vector{<:Integer}, pos::Integer, buffer::UInt8, lastpix::Integer, thisblock::Integer, fsmax::Integer, fsbits::Integer)
 
 Decodes the values of a block length thisblock
 """
-function decode_block(encoded::Array{UInt8}, decoded::Vector, pos::Int, buffer::Int, lastpix::Int, thisblock::Int, fsmax::Int, fsbits::Int)::Tuple{Int, Int, Int}
+function decode_block!(encoded::Array{UInt8}, decoded::Vector{<:Integer}, pos::Integer, buffer::UInt8, lastpix::Integer, thisblock::Integer, fsmax::Integer, fsbits::Integer)
     #Decode the fs value
-    fs, pos, buffer = binary_decode(encoded, fsbits, pos, buffer)
+    fs, pos, buffer = binary_decode!(encoded, fsbits, pos, buffer)
     bbits = 1 << fsbits	
 
     #High entropy case, values written directly in binary
     if(fs > fsmax)
         for _ in 1:thisblock
-            diff, pos, buffer = binary_decode(encoded, bbits, pos, buffer)
+            diff, pos, buffer = binary_decode!(encoded, bbits, pos, buffer)
             println(resign(diff))
             lastpix += resign(diff)
             push!(decoded, lastpix)
@@ -262,7 +257,7 @@ function decode_block(encoded::Array{UInt8}, decoded::Vector, pos::Int, buffer::
     #Standard case, decode from rice compression
     else
         for _ in 1:thisblock
-            diff, pos, buffer = decode_value(encoded, fs, pos, buffer)
+            diff, pos, buffer = decode_value!(encoded, fs, pos, buffer)
             lastpix += diff
             push!(decoded, lastpix)
         end
@@ -271,20 +266,9 @@ function decode_block(encoded::Array{UInt8}, decoded::Vector, pos::Int, buffer::
     return pos, buffer, lastpix
 end
 
-
-function arrange(vector::Vector, dims::Tuple{Int, Int})::Matrix
-    decoded::Matrix = zeros(Int, dims)
-    for i in 0:dims[1]-1
-        for j in 1:dims[2]
-            decoded[i+1,j] = vector[i*dims[2] + j]
-        end
-    end
-    return decoded
-end
-
-
 """
-    rice_decode(encoded::Array{UInt8}, nx::Int, fsbits::Int = 5, fsmax::Int = 25, nblock::Int = 8)::Vector{Int}
+    decode(::Type{Rice}, encoded::Array{UInt8}, nx::Integer, type::Type;
+                                nblock::Integer = 32)
 
 nx: Number of pixels in original image
 fsbits: Number of bits fs values were stored in
@@ -292,10 +276,8 @@ fsmax: Maximum value for fs. Must be less than 2^fsbits
 nblock: Encoding block size. Smaller values result in better rice encoding but more fs values stored
 Decodes a Rice-coded UInt8 array into its original integer array.
 """
-function rice_decode(encoded::Array{UInt8}, 
-                                dims::Tuple{Int,Int},
-                                type::Type,
-                                nblock::Int = 32)::Matrix{type}
+function decode(::Type{Rice}, encoded::Array{UInt8}, nx::Integer, type::Type;
+                                nblock::Integer = 32)
     
     #Assign constants based on Int type
     typelen = sizeof(type)*8
@@ -306,11 +288,10 @@ function rice_decode(encoded::Array{UInt8},
     #Initialize decoding variables
     decoded_array = type[]
     pos = 1
-    buffer = 8
-    nx = dims[1] * dims[2]
+    buffer::UInt8 = 8
 
     #Decode the initial value
-    initial, pos, buffer = binary_decode(encoded, bbits, pos, buffer)
+    initial, pos, buffer = binary_decode!(encoded, bbits, pos, buffer)
     lastpix = initial
 
     #Decode differences one block at a time
@@ -320,11 +301,11 @@ function rice_decode(encoded::Array{UInt8},
         if (nx-i < nblock)
             thisblock = nx-i
         end
-	    pos, buffer, lastpix = decode_block(encoded, decoded_array, pos, buffer, lastpix, thisblock, fsmax, fsbits)
+	    pos, buffer, lastpix = decode_block!(encoded, decoded_array, pos, buffer, lastpix, thisblock, fsmax, fsbits)
         i += nblock
     end
 
-    return arrange(decoded_array, dims)
+    return decoded_array
 end
 
 end  # module

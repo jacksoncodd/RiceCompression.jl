@@ -61,23 +61,17 @@ data = file[1].data
 #     end
 # end
 
-bsize = 32
 # Encoding
-compressed = RiceCompression.rice_encode(data, bsize)
-# println("Original Data: ", data)
+rs = reshape(data, :)
+
+compressed = RiceCompression.encode(RiceCompression.Rice,rs)
 println("Size of original data (bytes): ", summarysize(data))
-# println("Compressed Data: ", compressed)
 println("Size of compressed data (bytes): ", summarysize(compressed))
 
 # Decoding
-decoded = RiceCompression.rice_decode(compressed, size(data), Int16, bsize)
-# println("Decoded Data: ", decoded)
+decoded = reshape(RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data)), size(data))
 println("Size of decoded data (bytes): ", summarysize(decoded))
 println("Match: ", data == decoded)
 
-# # using cfitsio
-# using Libdl
-# dlopen("cfitsio.so")
-# a = @ccall "ricecomp.c".fits_rcomp_short([1,2,3,4]::Ptr{Int},4::Int, 5::Int, 32::Int)::Int
-# # t = @ccall clock()::Int32
+
 
