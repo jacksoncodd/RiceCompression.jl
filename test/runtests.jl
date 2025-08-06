@@ -1,77 +1,104 @@
 using Base: summarysize
 
 # Testing the implementation
-# using ..HighEntropyRice
-# using ..BasicRiceCompression
-# using ..StandardRice
 using ..RiceCompression
 using FITSFiles
 using Test
 
-# @testset "Rice Compression" begin
+@testset "Simple Cases" begin
+    
+    #Trivial Case
+    data::Vector = [0]
 
-#     #Test 1 element array
-#     data = zeros(Int, 1)
+    compressed = RiceCompression.encode(RiceCompression.Rice,data)
+    decoded = RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data))
 
-#     compressed = UIntRice.rice_encode(data)
-#     decoded = UIntRice.rice_decode(compressed, length(data))
+    @test data == decoded
 
-#     @test isequal(data, decoded)
+    #Small Vector
+    data = zeros(Int64, 65)
+    for i in eachindex(data)  
+        data[i] = rand(0:1000)
+    end
 
-#     #Test large array of zeros
-#     data = zeros(Int, 100)
+    compressed = RiceCompression.encode(RiceCompression.Rice,data)
+    decoded = RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data))
 
-#     compressed = UIntRice.rice_encode(data)
-#     decoded = UIntRice.rice_decode(compressed, length(data))
+    @test data == decoded
+end
 
-#     @test isequal(data, decoded)
+@testset "Type Testing" begin
+    data = rand(UInt8, 32)
 
-#     #Test large array with random entries
-#     for i in 1:100
-#         data[i] = rand(0:1000)
-#     end
+    #Int8
+    data_Int8 = zeros(Int8, 32)
+    for i in eachindex(data_Int8)  
+        data_Int8[i] = data[i] >> 2
+    end
+    compressed_Int8 = RiceCompression.encode(RiceCompression.Rice,data_Int8)
+    decoded_Int8 = RiceCompression.decode(RiceCompression.Rice,compressed_Int8, length(data_Int8), eltype(data_Int8))
 
-#     compressed = UIntRice.rice_encode(data)
-#     decoded = UIntRice.rice_decode(compressed, length(data))
+    @test data_Int8 == decoded_Int8
+    @test eltype(decoded_Int8) == Int8
 
-#     @test isequal(data, decoded)
+    #Int16
+    data_Int16 = zeros(Int16, 32)
+    for i in eachindex(data_Int16)  
+        data_Int16[i] = data[i]
+    end
+    compressed_Int16 = RiceCompression.encode(RiceCompression.Rice,data_Int16)
+    decoded_Int16 = RiceCompression.decode(RiceCompression.Rice,compressed_Int16, length(data_Int16), eltype(data_Int16))
 
-#     #Test high entropy case
-#     # data = [0, 1 << 31, 0, 1 << 31]
+    @test data_Int16 == decoded_Int16
+    @test eltype(decoded_Int16) == Int16
 
-#     # compressed = UIntRice.rice_encode(data)
-#     # decoded = UIntRice.rice_decode(compressed, length(data))
+    #Int32
+    data_Int32 = zeros(Int32, 32)
+    for i in eachindex(data_Int32)  
+        data_Int32[i] = data[i]
+    end
+    compressed_Int32 = RiceCompression.encode(RiceCompression.Rice,data_Int32)
+    decoded_Int32 = RiceCompression.decode(RiceCompression.Rice,compressed_Int32, length(data_Int32), eltype(data_Int32))
 
-#     # @test isequal(data, decoded)
+    @test data_Int32 == decoded_Int32
+    @test eltype(decoded_Int32) == Int32
 
-# end
+    #Int128
+    data_Int128 = zeros(Int128, 32)
+    for i in eachindex(data_Int128)  
+        data_Int128[i] = data[i]
+    end
+    compressed_Int128 = RiceCompression.encode(RiceCompression.Rice,data_Int128)
+    decoded_Int128 = RiceCompression.decode(RiceCompression.Rice,compressed_Int128, length(data_Int128), eltype(data_Int128))
 
-file = FITSFiles.fits("data/m13.fits")
-# # cards = file[1].cards
-# # println(cards)
-data = file[1].data
-# println(file)
+    @test data_Int128 == decoded_Int128
+    @test eltype(decoded_Int128) == Int128
+end
 
+@testset "FITS Input" begin
+    
+    file = FITSFiles.fits("data/m13.fits")
+    data = file[1].data
+    rs = reshape(data, :)
 
-# Test array
-# data2::Matrix{Int} = zeros(Int, 10, 10)
-# for i in 1:10
-#     for j in 1:10
-#         data2[i,j] = rand(0:1000)
-#     end
-# end
+    compressed = RiceCompression.encode(RiceCompression.Rice,rs)
 
-# Encoding
-rs = reshape(data, :)
+    # Decoding
+    decoded = reshape(RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data)), size(data))
 
-compressed = RiceCompression.encode(RiceCompression.Rice,rs)
-println("Size of original data (bytes): ", summarysize(data))
-println("Size of compressed data (bytes): ", summarysize(compressed))
+    @test data == decoded
 
-# Decoding
-decoded = reshape(RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data)), size(data))
-println("Size of decoded data (bytes): ", summarysize(decoded))
-println("Match: ", data == decoded)
+    comp_file = FITSFiles.fits("data/m13_rice.fits")
+    comp_data = file[1].data
+    compressed = reshape(comp_data, :)
+
+    # Decoding
+    decoded = reshape(RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data)), size(data))
+
+    @test data == decoded
+
+end
+
 
 
 
