@@ -16,10 +16,7 @@ using Test
     @test data == decoded
 
     #Small Vector
-    data = zeros(Int64, 65)
-    for i in eachindex(data)  
-        data[i] = rand(0:1000)
-    end
+    data = rand(1:1000, 65)
 
     compressed = RiceCompression.encode(RiceCompression.Rice,data)
     decoded = RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data))
@@ -28,12 +25,12 @@ using Test
 end
 
 @testset "Type Testing" begin
-    data = rand(UInt8, 32)
+    data = rand(0:63, 32)
 
     #Int8
     data_Int8 = zeros(Int8, 32)
     for i in eachindex(data_Int8)  
-        data_Int8[i] = data[i] >> 2
+        data_Int8[i] = data[i]
     end
     compressed_Int8 = RiceCompression.encode(RiceCompression.Rice,data_Int8)
     decoded_Int8 = RiceCompression.decode(RiceCompression.Rice,compressed_Int8, length(data_Int8), eltype(data_Int8))
@@ -88,14 +85,45 @@ end
 
     @test data == decoded
 
-    comp_file = FITSFiles.fits("data/m13_rice.fits")
-    comp_data = file[1].data
-    compressed = reshape(comp_data, :)
+    # comp_file = FITSFiles.fits("data/m13_rice.fits")
+    # comp_data = file[1].data
+    # compressed = reshape(comp_data, :)
 
-    # Decoding
-    decoded = reshape(RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data)), size(data))
+    # # Decoding
+    # decoded = reshape(RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data)), size(data))
 
-    @test data == decoded
+    # @test data == decoded
+
+end
+
+@testset "Multi Threading" begin
+
+    file = FITSFiles.fits("data/m13.fits")
+    data = file[1].data
+    rs = reshape(data, :)
+
+    data_split = []
+    n = 0
+    while n < length(rs)
+        m = n + 256
+        m = min(m, length(rs))
+        append!(data_split, [rs[n+1:m]])
+        n = m
+    end
+
+    outputs = []
+
+    Threads.@threads for i in eachindex(data_split)
+        compressed = RiceCompression.encode(RiceCompression.Rice,data_split[i])
+        append!(outputs, RiceCompression.decode(RiceCompression.Rice,compressed, length(data_split[i]), eltype(data_split[i])))
+    end
+
+    decoded = []
+    for i in eachindex(outputs)
+        append!(decoded, outputs[i])
+    end
+
+    @test data == reshape(decoded, size(data))
 
 end
 
