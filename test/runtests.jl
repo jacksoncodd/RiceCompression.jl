@@ -105,7 +105,7 @@ end
     data_split = []
     n = 0
     while n < length(rs)
-        m = n + 32
+        m = n + 256
         m = min(m, length(rs))
         append!(data_split, [rs[n+1:m]])
         n = m
