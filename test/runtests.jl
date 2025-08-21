@@ -24,12 +24,38 @@ using Test
     @test data == decoded
 end
 
+@testset "Low Entropy Test" begin
+    data::Vector = zeros(Int16,64)
+
+    compressed = RiceCompression.encode(RiceCompression.Rice,data)
+    @test compressed == UInt8[0x00, 0x00, 0x00, 0x00]
+
+    for i in eachindex(data) 
+        data[i] = 50
+    end
+
+    compressed = RiceCompression.encode(RiceCompression.Rice,data)
+    @test compressed == UInt8[0x00, 0x32, 0x00, 0x00]
+end
+
+@testset "High Entropy Test" begin
+    data = zeros(Int32, 6)
+    data[2] = 1<<31 -1
+    data[4] = 1<<31 -1
+    data[6] = 1<<31 -1
+
+    compressed = RiceCompression.encode(RiceCompression.Rice,data)
+    decoded = RiceCompression.decode(RiceCompression.Rice,compressed, length(data),eltype(data))
+
+    @test data == decoded
+end
+
 @testset "Type Testing" begin
     data = rand(0:63, 32)
 
     #Int8
     data_Int8 = zeros(Int8, 32)
-    for i in eachindex(data_Int8)  
+    for i in eachindex(data_Int8)
         data_Int8[i] = data[i]
     end
     compressed_Int8 = RiceCompression.encode(RiceCompression.Rice,data_Int8)
