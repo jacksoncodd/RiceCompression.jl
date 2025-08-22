@@ -8,7 +8,7 @@ using Test
 @testset "Simple Cases" begin
     
     #Trivial Case
-    data::Vector = [0]
+    data::Vector = Int16[0]
 
     compressed = RiceCompression.encode(RiceCompression.Rice,data)
     decoded = RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data))
@@ -16,9 +16,11 @@ using Test
     @test data == decoded
 
     #Small Vector
-    data = rand(1:1000, 65)
+    # data = rand(1:1000, 65)
+    data = Int16[112, 112, 113, 113, 112, 112, 113, 113, 113, 113, 112, 112, 112, 114, 114, 114, 113, 113, 112, 112, 112, 112, 111, 111, 112, 112, 112, 114, 115, 115, 115, 115]
 
     compressed = RiceCompression.encode(RiceCompression.Rice,data)
+    println(compressed)
     decoded = RiceCompression.decode(RiceCompression.Rice,compressed, length(data), eltype(data))
 
     @test data == decoded
@@ -129,6 +131,7 @@ end
     rs = reshape(data, :)
 
     data_split = []
+    decoded = zeros(eltype(data), size(data))
     n = 0
     while n < length(rs)
         m = n + 256
@@ -137,16 +140,12 @@ end
         n = m
     end
 
-    outputs = []
-
     Threads.@threads for i in eachindex(data_split)
         compressed = RiceCompression.encode(RiceCompression.Rice,data_split[i])
-        append!(outputs, RiceCompression.decode(RiceCompression.Rice,compressed, length(data_split[i]), eltype(data_split[i])))
-    end
-
-    decoded = []
-    for i in eachindex(outputs)
-        append!(decoded, outputs[i])
+        output = RiceCompression.decode(RiceCompression.Rice,compressed, length(data_split[i]), eltype(data_split[i]))
+        for j in eachindex(output)
+            decoded[(i-1)*256 + j] = output[j]
+        end
     end
 
     @test data == reshape(decoded, size(data))

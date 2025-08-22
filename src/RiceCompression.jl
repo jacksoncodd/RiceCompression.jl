@@ -36,9 +36,9 @@ function encode_value!(encoded::Array{UInt8}, value::Integer, fs::Integer, pos::
     q = value >> fs
     #Encode quotient
     for _ in 1:q
-        encoded, pos, buffer = write!(encoded, 1, 1, pos, buffer)
+        encoded, pos, buffer = write!(encoded, 0, 1, pos, buffer)
     end
-    encoded, pos, buffer = write!(encoded, 0, 1, pos, buffer)
+    encoded, pos, buffer = write!(encoded, 1, 1, pos, buffer)
     #Encode remainder
     encoded, pos, buffer = write!(encoded, value & ((1 << fs) -1), fs, pos, buffer)
     return encoded, pos, buffer
@@ -92,7 +92,7 @@ end
 
 Encodes a block of integers with size thisblock using rice compression
 """
-function encode_block!(encoded::Array{UInt8}, data::Vector{<:Integer}, pos::Integer, buffer::UInt8, lastpix::Integer, thisblock::Integer, fsmax::Integer, fsbits::Integer)
+function encode_block!(encoded::Array{UInt8}, data::Vector{<:Integer}, pos::Integer, buffer::UInt8, lastpix::Integer, fsmax::Integer, fsbits::Integer)
     bbits = 1 << fsbits
 
     fs, lastpix, diff, pixelsum = calc_fs(data, lastpix)
@@ -149,7 +149,7 @@ function encode(::Type{Rice}, data::AbstractVector{<:Integer};
         if (nx-i < nblock) 
             thisblock = nx-i
         end
-	    encoded, pos, buffer, lastpix = encode_block!(encoded, data[i+1:i+thisblock], pos, buffer, lastpix, thisblock, fsmax, fsbits)
+	    encoded, pos, buffer, lastpix = encode_block!(encoded, data[i+1:i+thisblock], pos, buffer, lastpix, fsmax, fsbits)
         i += nblock
     end
 
@@ -165,8 +165,8 @@ Returns the decoded integer and the updated position.
 """
 function unary_decode!(encoded::Array{UInt8}, pos::Integer, buffer::UInt8)
     value = 0
-    bit = 1
-    while(bit == 1)
+    bit = 0
+    while(bit == 0)
         if(buffer <= 0)
             pos += 1
             buffer::UInt8 = 8
@@ -176,7 +176,9 @@ function unary_decode!(encoded::Array{UInt8}, pos::Integer, buffer::UInt8)
         end
         buffer -= 1
         bit = (encoded[pos] >> buffer) & 1
-        value += bit
+        if(bit == 0)
+            value += 1
+        end
     end
     if(buffer <= 0)
         pos += 1
